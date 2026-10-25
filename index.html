@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="记牢">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>记牢提醒原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: one phone-width column. Big talk button up top, reminder cards below; confirm and ringing take over the whole screen. */
+:root{
+  --bg:#F1F5F0; --surface:#FFFFFF; --ink:#14221B; --muted:#53645A; --line:#D3DED6;
+  --green:#1C7450; --on-green:#FFFFFF; --green-soft:#DDEEE4;
+  --amber:#F4AE00; --on-amber:#1D1500; --amber-soft:#FFF1C9;
+  --red:#A6372B; --shade:rgba(10,20,15,.55); --shadow:rgba(20,34,27,.10);
+  --font:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1612; --surface:#17221C; --ink:#E9F2EC; --muted:#9BB0A3; --line:#2A3B32;
+  --green:#3CBF85; --on-green:#06170E; --green-soft:#183326;
+  --amber:#FFC21F; --on-amber:#1D1500; --amber-soft:#37290A;
+  --red:#F0806F; --shade:rgba(0,0,0,.7); --shadow:rgba(0,0,0,.35); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1612; --surface:#17221C; --ink:#E9F2EC; --muted:#9BB0A3; --line:#2A3B32;
+  --green:#3CBF85; --on-green:#06170E; --green-soft:#183326;
+  --amber:#FFC21F; --on-amber:#1D1500; --amber-soft:#37290A;
+  --red:#F0806F; --shade:rgba(0,0,0,.7); --shadow:rgba(0,0,0,.35); color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:20px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.app{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--amber);outline-offset:3px}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.brand{font-size:44px;font-weight:900;letter-spacing:.06em;line-height:1}
+.brand small{display:block;font-size:17px;font-weight:500;letter-spacing:0;color:var(--muted);margin-top:8px}
+.today{font-size:18px;color:var(--muted);text-align:right}
+.today b{display:block;font-size:22px;color:var(--ink)}
+
+.talkwrap{display:flex;flex-direction:column;align-items:center;gap:16px;padding-block:8px}
+.talk{width:200px;height:200px;border-radius:50%;background:var(--green);color:var(--on-green);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  box-shadow:0 0 0 10px var(--green-soft),0 10px 30px var(--shadow);transition:transform .12s}
+.talk:active{transform:scale(.96)}
+.talk svg{width:56px;height:56px}
+.talk span{font-size:28px;font-weight:700;line-height:1.2}
+.tip{font-size:18px;color:var(--muted);text-align:center;max-width:22em}
+.tip q{color:var(--ink);font-weight:500}
+
+.section-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.section-h h2{font-size:24px;font-weight:700}
+.section-h span{font-size:17px;color:var(--muted)}
+.list{display:flex;flex-direction:column;gap:14px;margin-top:12px}
+.empty{padding:20px;border:2px dashed var(--line);border-radius:16px;color:var(--muted);font-size:18px;text-align:center}
+
+.card{background:var(--surface);border-radius:18px;padding:18px 18px 14px;box-shadow:0 2px 10px var(--shadow);display:flex;flex-direction:column;gap:10px}
+.card.ringing{outline:4px solid var(--amber)}
+.when{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.clock{font-size:40px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.day{font-size:19px;color:var(--muted);font-weight:500}
+.sample{font-size:14px;padding:2px 8px;border-radius:99px;background:var(--line);color:var(--muted);margin-left:auto}
+.what{font-size:26px;font-weight:700;line-height:1.3}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0}
+.chips li{background:var(--green-soft);border-radius:10px;padding:2px 12px;font-size:19px;font-weight:500}
+.next{display:flex;align-items:center;gap:8px;font-size:17px;color:var(--muted)}
+.next svg{width:20px;height:20px;flex:none}
+.next.snooze{color:var(--red)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:12px}
+.btn-done{background:var(--green);color:var(--on-green);font-size:20px;font-weight:700;padding:10px 22px;border-radius:12px}
+.btn-small{font-size:16px;color:var(--muted);padding:8px 10px;border-radius:10px}
+.btn-small:hover{background:var(--bg)}
+.btn-small.armed{color:var(--red);font-weight:700}
+.card.done{box-shadow:none;background:transparent;border:1px solid var(--line);opacity:.75}
+.card.done .what{text-decoration:line-through;text-decoration-thickness:2px}
+.card.done .clock{font-size:26px}
+
+details.box{background:var(--surface);border-radius:16px;padding:14px 18px;font-size:18px}
+details.box summary{font-weight:700;cursor:pointer}
+details.box[open] summary{margin-bottom:10px}
+.note-list{margin:0;padding-left:1.2em;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.dict-wrap{overflow-x:auto}
+table.dict{border-collapse:collapse;width:100%;font-size:17px}
+table.dict th,table.dict td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.dict th{color:var(--muted);font-weight:500;font-size:15px}
+table.dict td.cat{color:var(--muted);font-size:15px;white-space:nowrap}
+
+/* sheets */
+.sheet{position:fixed;inset:0;background:var(--shade);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet-card{background:var(--surface);width:100%;max-width:560px;max-height:100%;overflow-y:auto;border-radius:24px 24px 0 0;
+  padding:24px max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
+  display:flex;flex-direction:column;gap:16px}
+@media (min-width:600px){.sheet{align-items:center}.sheet-card{border-radius:24px}}
+.listen-head{display:flex;align-items:center;gap:16px}
+.pulse{width:72px;height:72px;border-radius:50%;background:var(--green);color:var(--on-green);display:grid;place-items:center;flex:none;animation:pulse 1.4s ease-out infinite}
+.pulse svg{width:34px;height:34px}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--green-soft)}100%{box-shadow:0 0 0 22px transparent}}
+.listen-head h2{font-size:26px}
+.sheet .note{font-size:17px;color:var(--muted)}
+.samples{display:flex;flex-direction:column;gap:10px}
+.samples button{text-align:left;background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:12px 14px;font-size:20px;line-height:1.4;display:flex;flex-direction:column;gap:2px}
+.samples button:hover{border-color:var(--green)}
+.samples small{font-size:14px;color:var(--muted)}
+form.type{display:flex;flex-direction:column;gap:12px}
+.mic-tip{font-size:21px;font-weight:700;line-height:1.4}
+.mic-key{display:inline-block;background:var(--amber-soft);border-radius:8px;padding:0 6px}
+#typeIn{width:100%;font:inherit;font-size:24px;line-height:1.4;padding:12px 14px;border-radius:14px;border:3px solid var(--green);background:var(--bg);color:var(--ink);resize:none}
+.sample-box summary{font-size:17px;color:var(--muted);cursor:pointer}
+.sample-box[open] summary{margin-bottom:10px}
+.row{display:flex;gap:8px}
+.voice{display:flex;flex-direction:column;gap:8px}
+.voice label{font-size:17px;color:var(--muted)}
+.row select{flex:1;min-width:0;font:inherit;font-size:18px;padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:var(--bg);color:var(--ink)}
+.vnote{font-size:16px;color:var(--muted)}
+.row input{flex:1;min-width:0;font:inherit;font-size:20px;padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:var(--bg);color:var(--ink)}
+.row button{background:var(--ink);color:var(--bg);border-radius:12px;padding:0 16px;font-weight:700;white-space:nowrap}
+.link{font-size:18px;color:var(--muted);text-decoration:underline;align-self:center;padding:6px}
+
+.heard{font-size:17px;color:var(--muted)}
+.heard q{color:var(--ink)}
+.cbox{background:var(--amber-soft);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.cday{font-size:19px;font-weight:500}
+.cwhat{font-size:30px;font-weight:900;line-height:1.25}
+.ctimes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 0}
+.ctimes div{background:var(--surface);border-radius:12px;padding:8px 12px}
+.ctimes dt{font-size:15px;color:var(--muted)}
+.ctimes dd{margin:0;font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.2}
+.ctimes dd small{font-size:16px;font-weight:500;color:var(--muted);margin-left:4px}
+.cwarn{font-size:17px;color:var(--red);font-weight:500}
+.ask{font-size:26px;font-weight:700;text-align:center}
+.two{display:grid;grid-template-columns:1.4fr 1fr;gap:12px}
+.btn-yes{background:var(--green);color:var(--on-green);font-size:24px;font-weight:900;padding:18px 8px;border-radius:16px}
+.btn-no{background:var(--bg);border:2px solid var(--line);font-size:21px;font-weight:700;padding:16px 8px;border-radius:16px}
+
+/* ringing */
+.ring{position:fixed;inset:0;background:var(--amber);color:var(--on-amber);z-index:20;display:flex;align-items:center;justify-content:center;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));overflow-y:auto}
+.ring-in{width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.bell{width:84px;height:84px;animation:shake 1s ease-in-out infinite;transform-origin:50% 10%}
+@keyframes shake{0%,100%{transform:rotate(0)}15%{transform:rotate(16deg)}30%{transform:rotate(-14deg)}45%{transform:rotate(10deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(0)}}
+.ring-stage{font-size:24px;font-weight:700}
+.ring-clock{font-size:76px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.ring-what{font-size:36px;font-weight:900;line-height:1.25}
+.ring-items{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;list-style:none;margin:0;padding:0}
+.ring-items li{background:rgba(255,255,255,.55);border-radius:10px;padding:4px 14px;font-size:24px;font-weight:700;color:#1D1500}
+.btn-big-done{width:100%;background:#14221B;color:#FFFFFF;font-size:30px;font-weight:900;padding:22px;border-radius:20px;margin-top:10px}
+.btn-later{width:100%;background:rgba(255,255,255,.5);color:#1D1500;font-size:22px;font-weight:700;padding:16px;border-radius:16px}
+.ring-hint{font-size:17px;font-weight:500}
+
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:12px 22px;border-radius:99px;font-size:19px;font-weight:700;z-index:30;max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion:reduce){.pulse,.bell{animation:none}.talk{transition:none}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1 class="brand">记牢<small>讲一句，就帮你记牢</small></h1>
+    <p class="today" id="today"></p>
+  </header>
+
+  <section class="talkwrap" aria-label="讲话">
+    <button class="talk" id="talk" aria-label="按一下讲话">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>
+      <span>按一下<br>讲话</span>
+    </button>
+    <p class="tip">比如讲：<q>明朝九点钟医院里去，八点钟叫我一声</q></p>
+  </section>
+
+  <section aria-labelledby="h-open">
+    <div class="section-h"><h2 id="h-open">要做的事</h2><span id="openCount"></span></div>
+    <div class="list" id="openList"></div>
+  </section>
+
+  <section aria-labelledby="h-done" id="doneSec">
+    <div class="section-h"><h2 id="h-done">做好了</h2><span id="doneCount"></span></div>
+    <div class="list" id="doneList"></div>
+  </section>
+
+  <details class="box">
+    <summary>这个原型是怎么回事</summary>
+    <ul class="note-list">
+      <li>讲话用的是手机键盘自带的话筒（语音输入）：按绿按钮，再按键盘上的话筒讲。转出来是同音字也没关系，它会对着宁波话词表理解。</li>
+      <li>其他都是真的：它会把宁波话理成"几点、做啥、买啥"，用普通话念一遍给你听；到点会叮叮响、手机会震，没按"做好了"就过 30 分钟再叫。</li>
+      <li>页面要开着才会响。正式版要改成到点打电话。</li>
+      <li>每张卡片上有"演示：现在响"，不用等就能看到提醒的样子。</li>
+      <li>记的事只存在这台手机的这个浏览器里。</li>
+    </ul>
+  </details>
+
+  <details class="box" id="voiceBox">
+    <summary>念的声音</summary>
+    <div class="voice">
+      <label for="voiceSel">选一个普通话最标准的声音</label>
+      <div class="row"><select id="voiceSel"></select><button type="button" id="voiceTest">试听</button></div>
+      <p class="vnote" id="voiceNote"></p>
+    </div>
+  </details>
+
+  <details class="box">
+    <summary>宁波话对照表（理解时用到的）</summary>
+    <div class="dict-wrap"><table class="dict"><thead><tr><th>宁波话</th><th>普通话</th><th>类别</th></tr></thead><tbody id="dictBody"></tbody></table></div>
+  </details>
+</div>
+
+<div class="sheet" id="listen" hidden role="dialog" aria-modal="true" aria-labelledby="listenTitle">
+  <div class="sheet-card">
+    <div class="listen-head">
+      <div class="pulse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></div>
+      <h2 id="listenTitle">你讲，我来记</h2>
+    </div>
+    <form class="type" id="typeForm">
+      <p class="mic-tip">按键盘上的 <b class="mic-key">🎤</b> 话筒，用宁波话讲，讲好再按「讲好了」</p>
+      <textarea id="typeIn" rows="3" autocomplete="off" placeholder="比如：明朝天亮九点钟医院去，八点钟叫我"></textarea>
+      <button type="submit" class="btn-yes">讲好了</button>
+    </form>
+    <details class="sample-box">
+      <summary>讲不出来？点一句示例试试</summary>
+      <div class="samples" id="samples"></div>
+    </details>
+    <button class="link" id="listenCancel">算了，不讲了</button>
+  </div>
+</div>
+
+<div class="sheet" id="confirm" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle">
+  <div class="sheet-card">
+    <p class="heard">你讲的：<q id="cHeard"></q></p>
+    <p class="heard" id="cNormP">我理解成：<q id="cNorm"></q></p>
+    <div class="cbox">
+      <p class="cday" id="cDay"></p>
+      <p class="cwhat" id="cWhat"></p>
+      <ul class="chips" id="cItems"></ul>
+      <dl class="ctimes">
+        <div><dt>先叫你一声</dt><dd id="cRemind"></dd></div>
+        <div><dt>到点再叫</dt><dd id="cEvent"></dd></div>
+      </dl>
+      <p class="cwarn" id="cWarn" hidden></p>
+    </div>
+    <p class="ask" id="askTitle">对吗？</p>
+    <div class="two">
+      <button class="btn-yes" id="yes">对的</button>
+      <button class="btn-no" id="no">重说一次</button>
+    </div>
+    <button class="link" id="replay">再念一遍给我听</button>
+  </div>
+</div>
+
+<div class="ring" id="ring" hidden role="alertdialog" aria-modal="true" aria-labelledby="rWhat">
+  <div class="ring-in">
+    <svg class="bell" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v.6A6.5 6.5 0 0 0 5.5 10.5V15l-2 3h17l-2-3v-4.5a6.5 6.5 0 0 0-5-6.4v-.6A1.5 1.5 0 0 0 12 2Zm-2.5 17.5a2.5 2.5 0 0 0 5 0Z"/></svg>
+    <p class="ring-stage" id="rStage"></p>
+    <p class="ring-clock" id="rClock"></p>
+    <p class="ring-what" id="rWhat"></p>
+    <ul class="ring-items" id="rItems"></ul>
+    <button class="btn-big-done" id="rDone">做好了</button>
+    <button class="btn-later" id="rLater"></button>
+    <p class="ring-hint" id="rHint"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const MIN=60e3, DAY=864e5;
+
+/* ---------- 对照表 ---------- */
+const DICT=[
+ ['今末 / 今朝','今天','时间'],['明朝','明天','时间'],['后日','后天','时间'],['大后日','大后天','时间'],
+ ['早晨头 / 早介','早上','时间'],['上半日','上午','时间'],['日中 / 中浪','中午','时间'],['下半日','下午','时间'],
+ ['夜到 / 夜里','晚上','时间'],['晏歇 / 等歇','待会儿','时间'],['辰光','时候','时间'],['礼拜三','星期三','时间'],
+ ['叫我一声 / 喊我一声','提醒我','讲法'],['帮我记记牢','帮我记住','讲法'],['到辰光叫我','到时候叫我','讲法'],
+ ['对个 / 是个','对的','讲法'],['勿对','不对','讲法'],['晏点再叫我','晚点再提醒','讲法'],
+ ['买小菜 / 买下饭','买菜','事情'],['小菜场','菜市场','事情'],['看毛病','看病','事情'],['挂盐水 / 吊盐水','输液','事情'],
+ ['人客来','客人来','事情'],['接小人','接小孩','事情'],['汰衣裳','洗衣服','事情'],['烧饭','做饭','事情'],
+ ['落雨','下雨','事情'],['物事','东西','东西'],['钞票','钱','东西'],['囡 / 囡儿','女儿','东西'],
+ ['黄芽菜','大白菜','菜名'],['洋番薯','土豆','菜名'],['鸡子','鸡蛋','菜名'],
+ ['天亮（贴娘）','早上','婆婆说法'],['等上（等尚）','待会儿','婆婆说法'],['每日（没孽）','每天','婆婆说法'],
+ ['喊我（欧我）','叫我','婆婆说法'],['搭我讲一声','跟我说一声','婆婆说法'],['……去（……起）','去……','婆婆说法'],
+ ['搭','到 / 给 / 跟','婆婆说法'],['吃药（缺药）','吃药','婆婆说法'],['爬起来（播起来）','起床','婆婆说法'],
+ ['荡马路','逛街','婆婆说法'],['先头一日（洗头一孽）','前一天','婆婆说法'],['弗错个（肥错哦）','对的','婆婆说法'],
+ ['弗是个（佛是嘎）','不对','婆婆说法'],['弄好了（弄好勒）','做好了','婆婆说法'],
+];
+const TR=[['衣裳','衣服'],['菜场','菜市场'],['买小菜','买菜'],['买下饭','买菜'],['小菜场','菜市场'],['看毛病','看病'],['挂盐水','输液'],['吊盐水','输液'],
+ ['人客','客人'],['接小人','接小孩'],['小人','小孩'],['汰衣裳','洗衣服'],['烧饭','做饭'],['落雨','下雨'],['物事','东西'],
+ ['钞票','钱'],['孙囡','孙女'],['囡儿','女儿'],['囡','女儿'],['医院里','医院'],['啥西','什么'],['勿','不'],['寻','找'],['拨','给']]
+ .sort((a,b)=>b[0].length-a[0].length);
+const VEG=[['油豆腐','油豆腐'],['香干','香干'],['素鸡','素鸡'],['黄芽菜','大白菜'],['大白菜','大白菜'],['洋番薯','土豆'],['土豆','土豆'],['番茄','番茄'],['西红柿','番茄'],['青菜','青菜'],
+ ['萝卜','萝卜'],['豆腐','豆腐'],['鸡蛋','鸡蛋'],['鸡子','鸡蛋'],['带鱼','带鱼'],['黄鱼','黄鱼'],['排骨','排骨'],['猪肉','猪肉'],
+ ['年糕','年糕'],['芹菜','芹菜'],['菠菜','菠菜'],['冬瓜','冬瓜'],['茄子','茄子'],['黄瓜','黄瓜'],['苹果','苹果'],['香蕉','香蕉'],
+ ['牛奶','牛奶'],['鸡','鸡'],['鱼','鱼'],['虾','虾'],['肉','肉']].sort((a,b)=>b[0].length-a[0].length);
+// 婆婆录音转出来的同音字 → 能看懂的说法。按顺序替换，长的、特殊的放前面
+const NORM=[
+ ['天娘','早上'],['贴娘','早上'],['天亮','早上'],
+ ['货篱笆','下礼拜'],['篱笆日天','礼拜日'],['篱笆日','礼拜日'],['篱笆录','礼拜六'],['立八噻','礼拜三'],['篱笆','礼拜'],['立八','礼拜'],
+ ['名照','明天'],['明照','明天'],['尚般日','上午'],['孽女','囡'],
+ ['话半日','下午'],['话八年','下午'],['话吧捏','下午'],['话八','下午'],['下半夜','下午'],
+ ['亚到','晚上'],['压倒','晚上'],['九够','中午'],['等尚','待会儿'],['哎孽','晚点'],['早年','早点'],['没孽','每天'],['每日','每天'],
+ ['赛事号','三十号'],['洗头一孽','前一天'],['先头一日','前一天'],['西头','时候'],['滴钟','点钟'],
+ ['欧我是头搭马路','一起逛街'],['头搭马路','一起逛街'],['荡马路','逛街'],
+ ['欧我','叫我'],['搭我话一星','叫我'],['搭我话一声','叫我'],['搭我搞一声','叫我'],['告诉我一声','叫我'],['告诉我一下','叫我'],
+ ['缺药','吃药'],['缺一列','吃一粒'],['缺一粒','吃一粒'],['配页','配药'],['衣员','医院'],['异域','医院'],['郭颜术','挂盐水'],['修饭','烧饭'],
+ ['八虐豆出来','把肉拿出来'],['噶东','化冻'],['雨宁克','有人客'],['宁克','人客'],['生女','孙女'],['生奶','孙女'],['有接','接'],['恩子','儿子'],
+ ['搭低洼','打电话'],['搭滴花','打电话'],['低洼','电话'],['滴花','电话'],['被基','给他'],['沙日','生日'],
+ ['噶素fi','交水费'],['素fi','水费'],['修进来','收进来'],['一安','把'],['强衣上','洗衣服'],['衣上','衣服'],
+ ['尹浩豆','银行拿'],['得尹浩','到银行'],['得银行','到银行'],['尹浩','银行'],['忒墟工资','退休工资'],['播起来','起床'],['爬起来','起床'],['公寓','公园'],['丢立','锻炼'],
+ ['牢你大吼','老年大学'],['丝雨','寺院'],['八部撒','拜菩萨'],['戳门','出门'],['搭雨赛','带雨伞'],['雨赛','雨伞'],['录雨','下雨'],['借宿也','激素药'],
+ ['菜强','菜场'],['敲思','超市'],['落卜','萝卜'],['下干','香干'],['素几','素鸡'],['麻','买'],
+];
+function norm(raw){
+  let t=raw.replace(/\s+/g,'');
+  NORM.forEach(([k,v])=>{ t=t.split(k).join(v); });
+  t=t.replace(/切(?=滴|点)/g,'七').replace(/[赛噻](?=滴|点)/g,'三').replace(/录(?=滴|点)/g,'六')
+     .replace(/(\d|[一二两三四五六七八九十])滴/g,'$1点')
+     .replace(/(?<!一)起(?!来|床)/g,'去')          // 宁波话"去"念"起"
+     .replace(/[勒累咧嘞]/g,'了')
+     .replace(/搭([^，,。]{1,4}?)打电话/g,'给$1打电话')
+     .replace(/搭([^，,。]{1,6}?)去/g,'去$1')
+     .replace(/搭/g,'到');
+  return t;
+}
+const PERIOD={早晨头:'am',早介头:'am',早介:'am',早晨:'am',早上:'am',上半日:'am',上午:'am',日中:'noon',中浪:'noon',中午:'noon',
+ 下半日:'pm',晏界:'pm',下午:'pm',夜到:'eve',夜里:'eve',晚上:'eve'};
+// 只讲了"下午"没讲几点，就先定这个钟点
+const PDEF={早晨头:8,早介头:8,早介:8,早晨:8,早上:8,上半日:9,上午:9,日中:12,中浪:12,中午:12,下半日:14,晏界:14,下午:14,夜到:19,夜里:19,晚上:19};
+const PK=Object.keys(PERIOD).sort((a,b)=>b.length-a.length).join('|');
+const NUM='\\d{1,2}|[一二两三四五六七八九十]{1,3}';
+const CN={零:0,一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
+function num(s){ if(/^\d+$/.test(s)) return +s;
+  if(s.includes('十')){const [a,b]=s.split('十'); return (a?CN[a]:1)*10+(b?CN[b]:0);} return CN[s]; }
+function adj(h,p){ if((p==='pm'||p==='eve')&&h<12) return h+12; if(p==='noon'&&h<6) return h+12; if(!p&&h>=1&&h<=5) return h+12; return h; }
+
+/* ---------- 把一句话理成提醒 ---------- */
+function parse(raw){
+  const text=norm(raw);
+  const now=new Date();
+  const pm=text.match(new RegExp(PK)); const defP=pm?PERIOD[pm[0]]:null;
+  const repeat=/每天/.test(text)?'daily':null;
+  const lead=(/早点/.test(text)?60:30)*MIN;
+  const re=new RegExp(`(${PK})?(${NUM})(?:点|:|：)钟?(半|一刻|三刻|(?:${NUM})分?)?`,'g');
+  const times=[]; let m;
+  while((m=re.exec(text))){
+    const h0=num(m[2]); if(h0==null||isNaN(h0)||h0>24) continue;
+    let min=0; const g=m[3];
+    if(g){ min = g==='半'?30 : g==='一刻'?15 : g==='三刻'?45 : (num(g.replace('分',''))||0); }
+    const after=text.slice(m.index+m[0].length);
+    const isRemind=/^[，,、]*(再|就|要|先)?(叫|喊|提醒)/.test(after);
+    times.push({h:adj(h0,m[1]?PERIOD[m[1]]:defP)%24,min,isRemind,str:m[0]});
+  }
+  const ev=times.find(t=>!t.isRemind), rm=times.find(t=>t.isRemind);
+
+  const base=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  let target=new Date(base), dayExplicit=true, weekly=false;
+  const WD={一:1,二:2,三:3,四:4,五:5,六:6,日:0,天:0};
+  const w=text.match(/(下)?(?:礼拜|星期|周)([一二三四五六日天])/);
+  const mdm=text.match(new RegExp(`(${NUM})月(${NUM})[号日]`));
+  const dn=text.match(new RegExp(`(${NUM})号`));
+  if(w&&w[1]){ const toMon=7-((now.getDay()+6)%7); target.setDate(target.getDate()+toMon+((WD[w[2]]+6)%7)); }
+  else if(w){ target.setDate(target.getDate()+(WD[w[2]]-now.getDay()+7)%7); weekly=true; }
+  else if(mdm){ const mo=num(mdm[1])-1, d=num(mdm[2]); target=new Date(now.getFullYear(),mo,d); if(target<base) target=new Date(now.getFullYear()+1,mo,d); }
+  else if(/大后日|大后天/.test(text)) target.setDate(target.getDate()+3);
+  else if(/后日|后天/.test(text)) target.setDate(target.getDate()+2);
+  else if(/明朝|明天|明日/.test(text)) target.setDate(target.getDate()+1);
+  else if(/今末|今朝|今天|今日/.test(text)) {}
+  else if(dn){ const n=num(dn[1]); target=new Date(now.getFullYear(),now.getMonth(),n); if(target<base) target=new Date(now.getFullYear(),now.getMonth()+1,n); }
+  else dayExplicit=false;
+
+  const soon=/晏歇|等歇|一歇|待会|等一下|等会/.test(text);
+  const at=t=>{const d=new Date(target); d.setHours(t.h,t.min,0,0); return d.getTime();};
+  let eventAt, remindAt, warn='';
+  const before=/前一天/.test(text)?DAY:lead;
+  const dh=pm?PDEF[pm[0]]:null;
+  if(ev){ eventAt=at(ev); remindAt=rm?at(rm):eventAt-before; }
+  else if(rm){ eventAt=at(rm); remindAt=/前一天/.test(text)?eventAt-DAY:eventAt; }
+  else if(dh!=null || (dayExplicit && !soon)){
+    eventAt=at({h:dh!=null?dh:9,min:0}); remindAt=eventAt-before;
+    warn=`没讲几点钟，先定在${say(eventAt)}，不对可以重说。`; }
+  else { eventAt=Math.ceil((Date.now()+60*MIN)/(5*MIN))*5*MIN; remindAt=eventAt-30*MIN;
+    if(!soon) warn='没听到几点钟，先定在一个钟头以后。'; }
+  if((ev||rm||dh!=null||dayExplicit) && eventAt<=Date.now()){
+    const shift = !dayExplicit ? DAY : weekly ? 7*DAY : 0;
+    if(shift){ eventAt+=shift; remindAt+=shift; } else warn='这个辰光已经过了，再看看对不对。';
+  }
+  if(remindAt>eventAt) remindAt=eventAt;
+  if(remindAt<Date.now() && eventAt>Date.now()) remindAt=eventAt;
+
+  // 事情和要买的东西
+  let t=text;
+  times.forEach(x=>{ t=t.replace(x.str,'，'); });
+  t=t.replace(/下?(?:礼拜|星期|周)[一二三四五六日天]/g,'，')
+     .replace(new RegExp(`(?:${NUM})月(?=(?:${NUM})[号日])`,'g'),'')
+     .replace(/每天|前一天|早点|晚点|侬|你/g,'，')
+     .replace(/大后日|大后天|后日|后天|明朝|明天|明日|今末|今朝|今天|今日/g,'，')
+     .replace(new RegExp(`(?:${NUM})号`,'g'),'，')
+     .replace(/晏歇|等歇|一歇|待会儿?|等一下|等会儿?/g,'，')
+     .replace(new RegExp(PK,'g'),'，')
+     .replace(/(?:再|就|先)?(?:叫|喊)我一声|(?:再|就|先)?(?:叫|喊)我|(?:再|就|先)?提醒我一下|提醒我|提醒一下|帮我记记牢|帮我记牢|记记牢|到辰光|一声/g,'，')
+     .replace(new RegExp(`(?:${NUM})样(?:物事|东西)?`,'g'),'，')
+     .replace(/主要|一下/g,'').replace(/我要|阿拉|我|要|啊|嘛|呢|吧|了|的/g,'');
+  const found=[];
+  if(/买|菜场|超市/.test(t)) VEG.forEach(([k,v])=>{ let i; while((i=t.indexOf(k))>-1){ found.push({i,v}); t=t.slice(0,i)+'，'.repeat(k.length)+t.slice(i+k.length); } });
+  const items=[...new Set(found.sort((a,b)=>a.i-b.i).map(f=>f.v))];
+  TR.forEach(([k,v])=>{ t=t.split(k).join(v); });
+  const segs=[...new Set(t.split(/[，,。.、；;！!？?]+/).map(s=>s.trim())
+    .filter(s=>s && !/^(买|买点|买些|还有|和|搭|跟|再|就|先|去|好)$/.test(s))
+    .map(s=>s.replace(/^到(.+去)/,'$1').replace(/^(?!去)(.+?)里?去(.*)$/,'去$1$2').replace(/^(去.+?)去$/,'$1')))];
+  let task=segs.join('，');
+  if(items.length && !/买/.test(task)) task = task ? task+'，买菜' : '买菜';
+  if(!task){ task='（没听清做啥）'; warn=(warn?warn+' ':'')+'没听清要做啥，可以重讲一遍。'; }
+  return {raw, heardAs:text, task, items, eventAt, remindAt, warn, repeat};
+}
+
+/* ---------- 时间怎么讲 ---------- */
+const sod=ts=>{const d=new Date(ts); return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();};
+const clock=ts=>{const d=new Date(ts); return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');};
+const period=ts=>{const h=new Date(ts).getHours(); return h<5?'凌晨':h<9?'早上':h<12?'上午':h<13?'中午':h<18?'下午':'晚上';};
+const md=ts=>{const d=new Date(ts); return `${d.getMonth()+1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;};
+function dayWord(ts){ const diff=Math.round((sod(ts)-sod(Date.now()))/DAY);
+  return ({'-1':'昨天',0:'今天',1:'明天',2:'后天'})[diff] || md(ts).replace(' ',''); }
+function dayLine(ts){ const w=dayWord(ts); return /月/.test(w)? md(ts) : `${w} · ${md(ts)}`; }
+function say(ts){ const d=new Date(ts), h=d.getHours(), m=d.getMinutes(); const h12=h>12?h-12:(h===0?12:h);
+  const mm=m===0?'点':m===30?'点半':m===15?'点一刻':m===45?'点三刻':`点${m}分`; return period(ts)+h12+mm; }
+const itemsTxt=r=>r.items.length?`，要买${r.items.join('、')}`:'';
+function confirmSpeech(r){
+  if(r.repeat) return `每天${say(r.remindAt)}提醒你：${r.task}${itemsTxt(r)}。对吗？`;
+  if(r.remindAt===r.eventAt) return `${dayWord(r.eventAt)}${say(r.eventAt)}提醒你：${r.task}${itemsTxt(r)}。对吗？`;
+  const d2 = sod(r.remindAt)===sod(r.eventAt)?'':dayWord(r.eventAt);
+  return `${dayWord(r.remindAt)}${say(r.remindAt)}先提醒你，${d2}${say(r.eventAt)}${r.task}${itemsTxt(r)}。对吗？`;
+}
+
+/* ---------- 声音 ---------- */
+let ac=null;
+document.addEventListener('pointerdown',()=>{ try{ ac=ac||new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') ac.resume(); }catch(e){} },true);
+// 只挑大陆普通话的声音，台湾腔、粤语、方言、搞怪声音都不要；越标准、越自然的排越前
+const VKEY='jilao-voice';
+const BAD=/粤|廣東|广东|Cantonese|Sinji|Sin-ji|台|Taiwan|Meijia|美佳|Mei-Jia|Hong ?Kong|香港|上海|Shanghai|陕西|Shaanxi|辽宁|Liaoning|东北|四川|Sichuan|河南|Henan|Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley|Bad|Bells|Bubbles|Whisper|Zarvox|Trinoids|Jester|Organ|Cellos|Superstar/i;
+const GOOD=[/Xiaoxiao|晓晓/i,/Yunxi|云希/i,/Xiaoyi|晓伊/i,/Natural|Neural|自然/i,/Google.*(普通话|Mandarin)/i,/Tingting|婷婷/i,/Lili|莉莉/i,/Yu-?shu|语舒/i,/Huihui|慧慧/i,/Yaoyao|瑶瑶/i,/Premium|Enhanced|高音质|增强/i];
+function mandarinVoices(){
+  let vs=[]; try{ vs=speechSynthesis.getVoices(); }catch(e){}
+  return vs.filter(v=>/^(zh[-_]CN|cmn)/i.test(v.lang) && !BAD.test(v.name))
+    .map(v=>({v,score:GOOD.reduce((s,re,i)=>re.test(v.name)?Math.min(s,i):s,99)-(/Premium|Enhanced|Natural|Neural|增强|高音质/i.test(v.name)?0.5:0)}))
+    .sort((a,b)=>a.score-b.score).map(x=>x.v);
+}
+function pickVoice(){
+  const vs=mandarinVoices(); let saved=null; try{ saved=localStorage.getItem(VKEY); }catch(e){}
+  return vs.find(v=>v.name===saved) || vs[0] || null;
+}
+function speak(text){ try{ const s=window.speechSynthesis; if(!s) return; s.cancel();
+  const u=new SpeechSynthesisUtterance(text); u.lang='zh-CN'; u.rate=0.9; u.pitch=1;
+  const v=pickVoice(); if(v) u.voice=v; s.speak(u); }catch(e){} }
+function ding(){ if(!ac) return; try{ const t0=ac.currentTime;
+  [0,.35,.7,1.05].forEach((dt,i)=>{ const o=ac.createOscillator(), g=ac.createGain(); o.type='sine'; o.frequency.value=i%2?660:880;
+    g.gain.setValueAtTime(.0001,t0+dt); g.gain.exponentialRampToValueAtTime(.4,t0+dt+.02); g.gain.exponentialRampToValueAtTime(.0001,t0+dt+.3);
+    o.connect(g).connect(ac.destination); o.start(t0+dt); o.stop(t0+dt+.32); }); }catch(e){} }
+const buzz=()=>{ try{ navigator.vibrate&&navigator.vibrate([500,200,500,200,500]); }catch(e){} };
+
+/* ---------- 存取 ---------- */
+const KEY='jilao-v1';
+let items=[];
+const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(items)); }catch(e){} };
+const mk=(p,extra)=>Object.assign({id:Math.random().toString(36).slice(2),...p,nextAt:p.remindAt,stage:p.remindAt<p.eventAt?'advance':'due',done:false},extra||{});
+try{ items=JSON.parse(localStorage.getItem(KEY)||'null')||null; }catch(e){ items=null; }
+if(!Array.isArray(items)){
+  items=[ mk(parse('明朝九点钟医院里去，八点钟叫我一声'),{sample:true}),
+          mk(parse('后日下半日两点钟人客来，一点半叫我'),{sample:true}),
+          mk(parse('晏歇小菜场去买小菜，青菜、萝卜、黄芽菜三样，叫我一声'),{sample:true,done:true,doneAt:Date.now()-2*3600e3}) ];
+  const d=items[2]; d.eventAt-=4*3600e3; d.remindAt-=4*3600e3; d.nextAt=d.remindAt;
+}
+
+/* ---------- 列表 ---------- */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const BELL='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v.6A6.5 6.5 0 0 0 5.5 10.5V15l-2 3h17l-2-3v-4.5a6.5 6.5 0 0 0-5-6.4v-.6A1.5 1.5 0 0 0 12 2Zm-2.5 17.5a2.5 2.5 0 0 0 5 0Z"/></svg>';
+function nextLine(r){
+  const c=ts=>(sod(ts)===sod(r.eventAt)?'':dayWord(ts)+' ')+clock(ts);
+  if(r.stage==='advance') return `${c(r.nextAt)} 先叫你一声，${clock(r.eventAt)} 到点再叫`;
+  if(r.stage==='snooze') return `还没做好，${c(r.nextAt)} 再叫你`;
+  return `${clock(r.nextAt)} 到点叫你`;
+}
+function card(r){
+  const chips=r.items.length?`<ul class="chips">${r.items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'';
+  const when=`<div class="when"><span class="clock">${clock(r.eventAt)}</span><span class="day">${esc(dayWord(r.eventAt))} ${period(r.eventAt)}</span>${r.repeat?'<span class="sample">每天</span>':''}${r.sample?'<span class="sample">示例</span>':''}</div>`;
+  if(r.done) return `<article class="card done">${when}<p class="what">${esc(r.task)}</p>${chips}</article>`;
+  return `<article class="card${ringingId===r.id?' ringing':''}" data-id="${r.id}">${when}<p class="what">${esc(r.task)}</p>${chips}
+    <p class="next${r.stage==='snooze'?' snooze':''}">${BELL}${esc(nextLine(r))}</p>
+    <div class="actions"><button class="btn-done" data-act="done">做好了</button>
+      <button class="btn-small" data-act="ring">演示：现在响</button>
+      <button class="btn-small" data-act="del">勿要了</button></div></article>`;
+}
+function render(){
+  $('#today').innerHTML=`<b>${md(Date.now()).split(' ')[0]}</b>星期${'日一二三四五六'[new Date().getDay()]}`;
+  const open=items.filter(r=>!r.done).sort((a,b)=>a.nextAt-b.nextAt);
+  const done=items.filter(r=>r.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  $('#openList').innerHTML=open.length?open.map(card).join(''):'<p class="empty">没有要做的事了。按上面的绿按钮讲一句。</p>';
+  $('#openCount').textContent=open.length?`${open.length} 件`:'';
+  $('#doneSec').hidden=!done.length;
+  $('#doneList').innerHTML=done.slice(0,5).map(card).join('');
+  $('#doneCount').textContent=done.length?`${done.length} 件`:'';
+}
+$('#openList').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act]'); if(!b) return;
+  const r=items.find(x=>x.id===b.closest('.card').dataset.id); if(!r) return;
+  if(b.dataset.act==='done'){ finish(r); }
+  else if(b.dataset.act==='ring'){ openRing(r); }
+  else if(b.dataset.act==='del'){
+    if(b.classList.contains('armed')){ items=items.filter(x=>x!==r); save(); render(); toast('删掉了'); }
+    else { b.classList.add('armed'); b.textContent='再按一下就删掉'; setTimeout(()=>{ if(b.isConnected){ b.classList.remove('armed'); b.textContent='勿要了'; } },3000); }
+  }
+});
+function finish(r){
+  if(r.repeat==='daily'){ // 每天的事：做好了就排到明天同一辰光
+    const gap=r.eventAt-r.remindAt; do{ r.eventAt+=DAY; }while(r.eventAt<=Date.now());
+    r.remindAt=r.eventAt-gap; r.nextAt=r.remindAt; r.stage=r.remindAt<r.eventAt?'advance':'due';
+    save(); render(); toast(`好的，明天 ${clock(r.eventAt)} 再叫你`); speak('好的，做好了，明天再叫你'); return; }
+  r.done=true; r.doneAt=Date.now(); save(); render(); toast('好的，这件事做好了'); speak('好的，做好了'); }
+
+/* ---------- 讲话 → 确认 ---------- */
+const SAMPLES=[
+  ['明照贴娘9滴钟到异域起，八滴钟提醒我','婆婆录音 第 5 条（同音字）'],
+  ['等尚起菜强，买青菜，落卜，大白菜','婆婆录音 第 6 条（同音字）'],
+  ['每日亚到八点钟缺药','婆婆录音 第 1 条（同音字）'],
+  ['压倒切滴要搭恩子搭低洼','婆婆录音 第 13 条（同音字）'],
+  ['货篱笆一搭衣员起配页起，早年欧我','婆婆录音 第 3 条（同音字）'],
+  ['十月赛事号要欧我是头搭马路起，侬洗头一孽告诉我一声','婆婆录音 第 24 条（同音字）'],
+  ['后天上午10点去银行，提醒我','普通话'],
+];
+$('#samples').innerHTML=SAMPLES.map(([t,tag],i)=>`<button data-i="${i}"><span>${esc(t)}</span><small>${tag}</small></button>`).join('');
+let lastFocus=null;
+function openSheet(id){ lastFocus=document.activeElement; $(id).hidden=false; const f=$(id).querySelector('button'); f&&f.focus(); }
+function closeSheet(id){ $(id).hidden=true; lastFocus&&lastFocus.focus&&lastFocus.focus(); }
+// 按大按钮：直接把光标放进输入框，手机键盘弹出来，婆婆按键盘上的话筒讲
+$('#talk').addEventListener('click',()=>{ lastFocus=document.activeElement; $('#listen').hidden=false; $('#typeIn').value=''; $('#typeIn').focus(); });
+$('#listenCancel').addEventListener('click',()=>closeSheet('#listen'));
+$('#samples').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) heard(SAMPLES[+b.dataset.i][0]); });
+$('#typeForm').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#typeIn').value.trim(); if(v){ heard(v); $('#typeIn').value=''; } });
+
+let pending=null;
+function heard(raw){
+  $('#listen').hidden=true;
+  pending=parse(raw);
+  const r=pending;
+  $('#cHeard').textContent=raw;
+  $('#cNorm').textContent=r.heardAs; $('#cNormP').hidden=r.heardAs===raw.replace(/\s+/g,'');
+  $('#cDay').textContent=(r.repeat?'每天 · 从':'')+dayLine(r.eventAt)+(r.repeat?'开始':'');
+  $('#cWhat').textContent=r.task;
+  $('#cItems').innerHTML=r.items.map(i=>`<li>${esc(i)}</li>`).join('');
+  const sameDay=sod(r.remindAt)===sod(r.eventAt);
+  $('#cRemind').innerHTML=r.remindAt===r.eventAt?'就到点叫':`${clock(r.remindAt)}${sameDay?'':`<small>${esc(dayWord(r.remindAt))}</small>`}`;
+  $('#cEvent').innerHTML=`${clock(r.eventAt)}<small>${period(r.eventAt)}</small>`;
+  $('#cWarn').hidden=!r.warn; $('#cWarn').textContent=r.warn;
+  openSheet('#confirm');
+  $('#yes').focus();
+  speak(confirmSpeech(r));
+}
+$('#replay').addEventListener('click',()=>pending&&speak(confirmSpeech(pending)));
+$('#no').addEventListener('click',()=>{ try{speechSynthesis.cancel();}catch(e){} pending=null; $('#confirm').hidden=true; $('#listen').hidden=false; $('#typeIn').value=''; $('#typeIn').focus(); });
+$('#yes').addEventListener('click',()=>{
+  if(!pending) return;
+  items.push(mk(pending)); pending=null; save(); closeSheet('#confirm'); render();
+  speak('好的，记牢了'); toast('记牢了');
+});
+
+/* ---------- 到点提醒 ---------- */
+let ringingId=null, ringTimer=null;
+function ringText(r){ return r.stage==='advance'
+  ? `提醒你，${dayWord(r.eventAt)==='今天'?'':dayWord(r.eventAt)}${say(r.eventAt)}：${r.task}${itemsTxt(r)}。`
+  : `到点了：${r.task}${itemsTxt(r)}。做好了就按"做好了"。`; }
+function openRing(r){
+  ringingId=r.id;
+  $('#rStage').textContent = r.stage==='advance' ? `先提个醒 · ${dayWord(r.eventAt)}${period(r.eventAt)}` : r.stage==='snooze' ? '还没做好哦' : '到点了';
+  $('#rClock').textContent=clock(r.eventAt);
+  $('#rWhat').textContent=r.task;
+  $('#rItems').innerHTML=r.items.map(i=>`<li>${esc(i)}</li>`).join('');
+  $('#rLater').textContent = r.stage==='advance' ? '晓得了，到点再叫我' : '晓得了，等歇再叫我';
+  $('#rHint').textContent = r.stage==='advance' ? `到 ${clock(r.eventAt)} 还会再叫你一次` : '没按"做好了"，过 30 分钟还会叫你';
+  lastFocus=document.activeElement; $('#ring').hidden=false; $('#rDone').focus();
+  const go=()=>{ ding(); buzz(); setTimeout(()=>{ if(ringingId===r.id) speak(ringText(r)); },1500); };
+  go(); clearInterval(ringTimer); ringTimer=setInterval(go,10000);
+  render();
+}
+function stopRing(){ clearInterval(ringTimer); ringTimer=null; try{speechSynthesis.cancel();}catch(e){} $('#ring').hidden=true; ringingId=null; lastFocus&&lastFocus.focus&&lastFocus.focus(); }
+$('#rDone').addEventListener('click',()=>{ const r=items.find(x=>x.id===ringingId); stopRing(); if(r) finish(r); });
+$('#rLater').addEventListener('click',()=>{
+  const r=items.find(x=>x.id===ringingId); stopRing(); if(!r) return;
+  if(r.stage==='advance' && r.eventAt>Date.now()){ r.nextAt=r.eventAt; r.stage='due'; toast(`好的，${clock(r.eventAt)} 再叫你`); }
+  else { r.nextAt=Date.now()+30*MIN; r.stage='snooze'; toast(`好的，${clock(r.nextAt)} 再叫你`); }
+  save(); render();
+});
+setInterval(()=>{
+  if(ringingId||!$('#confirm').hidden||!$('#listen').hidden) return;
+  const due=items.filter(r=>!r.done&&r.nextAt<=Date.now()).sort((a,b)=>a.nextAt-b.nextAt)[0];
+  if(due) openRing(due); else render();
+},5000);
+
+/* ---------- 小工具 ---------- */
+let tt=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>{t.hidden=true;},2600); }
+$('#dictBody').innerHTML=DICT.map(([a,b,c])=>`<tr><td>${a}</td><td>${b}</td><td class="cat">${c}</td></tr>`).join('');
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(!$('#listen').hidden) closeSheet('#listen'); else if(!$('#confirm').hidden) closeSheet('#confirm'); } });
+function fillVoices(){
+  const vs=mandarinVoices(), cur=pickVoice(), sel=$('#voiceSel');
+  sel.innerHTML=vs.map((v,i)=>`<option value="${esc(v.name)}"${cur&&v.name===cur.name?' selected':''}>${esc(v.name)}${i===0?'（推荐）':''}</option>`).join('');
+  sel.disabled=!vs.length; $('#voiceTest').disabled=!vs.length;
+  $('#voiceNote').textContent = vs.length
+    ? '已经自动挑了最标准的一个。听着不顺耳，就换一个再按“试听”，会记住你的选择。'
+    : '这台手机没有普通话朗读声音，在手机“设置 → 辅助功能 → 朗读”里下载一个“中文（中国大陆）”的声音就好。';
+}
+$('#voiceSel').addEventListener('change',e=>{ try{ localStorage.setItem(VKEY,e.target.value); }catch(err){} speak('明天早上8点先提醒你，上午9点去医院。'); });
+$('#voiceTest').addEventListener('click',()=>speak('明天早上8点先提醒你，上午9点去医院。对吗？'));
+try{ speechSynthesis.getVoices(); speechSynthesis.addEventListener('voiceschanged',fillVoices); }catch(e){}
+fillVoices();
+render();
+window.__parse=parse;
+})();
+</script>
+
+</html>
